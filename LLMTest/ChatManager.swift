@@ -16,8 +16,10 @@ class ChatManager: ObservableObject {
     @Published var activeConversation: Conversation?
     @Published var isProcessing = false
     @Published var errorMessage: String?
+    @Published var isModelLoaded = false
     
     private let storageManager = StorageManager.shared
+    private let llamaWrapper = LlamaWrapper()
     private var cancellables = Set<AnyCancellable>()
     
     private init() {
@@ -30,6 +32,55 @@ class ChatManager: ObservableObject {
             .receive(on: DispatchQueue.main)
             .assign(to: \.errorMessage, on: self)
             .store(in: &cancellables)
+        
+        // Observe llama wrapper state
+        llamaWrapper.$isModelLoaded
+            .receive(on: DispatchQueue.main)
+            .assign(to: \.isModelLoaded, on: self)
+            .store(in: &cancellables)
+        
+        llamaWrapper.$isGenerating
+            .receive(on: DispatchQueue.main)
+            .assign(to: \.isProcessing, on: self)
+            .store(in: &cancellables)
+        
+        llamaWrapper.$errorMessage
+            .receive(on: DispatchQueue.main)
+            .assign(to: \.errorMessage, on: self)
+            .store(in: &cancellables)
+    }
+    
+    // MARK: - Model Management
+    
+    /// Load a model for inference
+    func loadModel(at path: String, contextSize: Int = 2048) async throws {
+        do {
+            try await llamaWrapper.loadModel(at: path, contextSize: contextSize)
+            clearError()
+        } catch {
+            handleError(error, context: "Model loading")
+            throw error
+        }
+    }
+    
+    /// Unload the current model
+    func unloadModel() async {
+        await llamaWrapper.unloadModel()
+    }
+    
+    /// Get current model information
+    func getModelInfo() -> ModelInfo {
+        return llamaWrapper.getModelInfo()
+    }
+    
+    /// Configure model parameters
+    func configureModel(threads: Int? = nil, gpuEnabled: Bool? = nil) {
+        if let threads = threads {
+            llamaWrapper.setThreads(threads)
+        }
+        if let gpuEnabled = gpuEnabled {
+            llamaWrapper.setGPUEnabled(gpuEnabled)
+        }
     }
     
     // MARK: - Conversation Management
@@ -58,7 +109,7 @@ class ChatManager: ObservableObject {
     
     // MARK: - Message Management
     
-    /// Send a user message and trigger AI response (placeholder)
+    /// Send a user message and trigger AI response
     func sendMessage(_ content: String, to conversation: Conversation) async {
         guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return
@@ -67,33 +118,136 @@ class ChatManager: ObservableObject {
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         
         // Add user message
-        let userMessage = storageManager.addMessage(
+        _ = storageManager.addMessage(
             to: conversation,
             content: trimmedContent,
             isFromUser: true,
             messageType: "text"
         )
         
-        // Set processing state
-        isProcessing = true
+        // Generate AI response
+        await generateAIResponse(for: trimmedContent, in: conversation)
+    }
+    
+    /// Send a user message with streaming AI response
+    func sendMessageWithStreaming(_ content: String, to conversation: Conversation) async {
+        guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
         
-        // Simulate AI processing delay (will be replaced with actual AI integration)
-        try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // Generate placeholder AI response
-        let aiResponse = generatePlaceholderResponse(for: trimmedContent)
-        
-        // Add AI message
-        let aiMessage = storageManager.addMessage(
+        // Add user message
+        _ = storageManager.addMessage(
             to: conversation,
-            content: aiResponse,
-            isFromUser: false,
-            messageType: "text",
-            metadata: "{\"model\": \"placeholder\", \"tokens\": \(aiResponse.count)}"
+            content: trimmedContent,
+            isFromUser: true,
+            messageType: "text"
         )
         
-        // Clear processing state
-        isProcessing = false
+        // Generate streaming AI response
+        await generateStreamingAIResponse(for: trimmedContent, in: conversation)
+    }
+    
+    /// Generate AI response using the loaded model
+    private func generateAIResponse(for prompt: String, in conversation: Conversation) async {
+        do {
+            let response: String
+            
+            if isModelLoaded {
+                // Use the actual LLM model
+                response = try await llamaWrapper.generateText(prompt: prompt)
+            } else {
+                // Fallback to placeholder response
+                response = generatePlaceholderResponse(for: prompt)
+            }
+            
+            // Add AI message
+            _ = storageManager.addMessage(
+                to: conversation,
+                content: response,
+                isFromUser: false,
+                messageType: "text",
+                metadata: createResponseMetadata(for: response)
+            )
+            
+        } catch {
+            handleError(error, context: "AI response generation")
+            
+            // Add error message as AI response
+            _ = storageManager.addMessage(
+                to: conversation,
+                content: "I apologize, but I encountered an error while generating a response. Please try again.",
+                isFromUser: false,
+                messageType: "error",
+                metadata: "{\"error\": \"\(error.localizedDescription)\"}"
+            )
+        }
+    }
+    
+    /// Generate streaming AI response using the loaded model
+    private func generateStreamingAIResponse(for prompt: String, in conversation: Conversation) async {
+        guard isModelLoaded else {
+            await generateAIResponse(for: prompt, in: conversation)
+            return
+        }
+        
+        do {
+            var fullResponse = ""
+            let aiMessage = storageManager.addMessage(
+                to: conversation,
+                content: "",
+                isFromUser: false,
+                messageType: "text"
+            )
+            
+            // Stream the response
+            for try await token in llamaWrapper.generateTextStream(prompt: prompt) {
+                fullResponse += token
+                
+                // Update the message content in real-time
+                storageManager.updateMessage(aiMessage, content: fullResponse)
+            }
+            
+            // Update final metadata
+            storageManager.updateMessage(
+                aiMessage,
+                content: fullResponse,
+                metadata: createResponseMetadata(for: fullResponse)
+            )
+            
+        } catch {
+            handleError(error, context: "Streaming AI response generation")
+            
+            // Add error message
+            _ = storageManager.addMessage(
+                to: conversation,
+                content: "I apologize, but I encountered an error while generating a response. Please try again.",
+                isFromUser: false,
+                messageType: "error",
+                metadata: "{\"error\": \"\(error.localizedDescription)\"}"
+            )
+        }
+    }
+    
+    /// Create metadata for AI response
+    private func createResponseMetadata(for response: String) -> String {
+        let modelInfo = llamaWrapper.getModelInfo()
+        let metadata = [
+            "model": isModelLoaded ? "llama.cpp" : "placeholder",
+            "tokens": response.count,
+            "model_loaded": isModelLoaded,
+            "vocabulary_size": modelInfo.vocabularySize,
+            "context_size": modelInfo.contextSize,
+            "memory_usage": modelInfo.memoryUsage
+        ] as [String: Any]
+        
+        if let jsonData = try? JSONSerialization.data(withJSONObject: metadata),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            return jsonString
+        }
+        
+        return "{\"model\": \"\(isModelLoaded ? "llama.cpp" : "placeholder")\", \"tokens\": \(response.count)}"
     }
     
     /// Get messages for a conversation
