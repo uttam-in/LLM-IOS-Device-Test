@@ -8,23 +8,55 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var hasCompletedSetup = UserDefaults.standard.bool(forKey: "hasCompletedFirstTimeSetup")
-    @StateObject private var modelManager = ModelManager.shared
+    @AppStorage("hasCompletedFirstTimeSetup") private var hasCompletedFirstTimeSetup = false
+    @StateObject private var errorManager = ErrorManager.shared
+    @StateObject private var recoveryManager = ErrorRecoveryManager.shared
+    @State private var currentConversation: Conversation?
     
     var body: some View {
-        Group {
-            if hasCompletedSetup || !modelManager.downloadedModels.isEmpty {
-                ConversationListView()
+        ZStack {
+            if hasCompletedFirstTimeSetup {
+                if let conversation = currentConversation {
+                    ChatView(conversation: conversation)
+                } else {
+                    ProgressView("Loading...")
+                        .onAppear {
+                            loadOrCreateConversation()
+                        }
+                }
             } else {
                 FirstTimeSetupView()
-                    .onReceive(NotificationCenter.default.publisher(for: .init("FirstTimeSetupCompleted"))) { _ in
-                        hasCompletedSetup = true
-                    }
+            }
+            
+            // Recovery progress overlay
+            VStack {
+                Spacer()
+                RecoveryProgressView()
+                    .padding(.bottom, 100)
             }
         }
+        .errorHandling() // Apply error handling modifier
         .onAppear {
-            // Check if setup was completed while app was running
-            hasCompletedSetup = UserDefaults.standard.bool(forKey: "hasCompletedFirstTimeSetup")
+            // Log system info on app start
+            ErrorLogger.shared.logSystemInfo()
+            
+            // Load conversation if setup is complete
+            if hasCompletedFirstTimeSetup {
+                loadOrCreateConversation()
+            }
+        }
+    }
+    
+    private func loadOrCreateConversation() {
+        // Try to get the most recent conversation, or create a new one
+        let storage = StorageManager.shared
+        let conversations = storage.getRecentConversations(limit: 1)
+        
+        if let recentConversation = conversations.first {
+            currentConversation = recentConversation
+        } else {
+            // Create a new conversation
+            currentConversation = storage.createConversation(title: "New Chat")
         }
     }
 }
