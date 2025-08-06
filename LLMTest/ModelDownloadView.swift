@@ -11,6 +11,7 @@ struct ModelDownloadView: View {
     @StateObject private var modelManager = ModelManager.shared
     @State private var showingStorageInfo = false
     @State private var selectedModel: ModelInfo?
+    @State private var lastFailedModel: ModelInfo?
     
     var body: some View {
         NavigationView {
@@ -78,11 +79,35 @@ struct ModelDownloadView: View {
                 StorageDetailView()
             }
             .alert("Error", isPresented: .constant(modelManager.errorMessage != nil)) {
+                Button("Retry") {
+                    retryLastFailedOperation()
+                }
                 Button("OK") {
                     modelManager.errorMessage = nil
                 }
             } message: {
                 Text(modelManager.errorMessage ?? "")
+            }
+        }
+    }
+    
+    private func retryLastFailedOperation() {
+        guard let failedModel = lastFailedModel else {
+            modelManager.errorMessage = nil
+            return
+        }
+        
+        Task {
+            do {
+                try await modelManager.downloadModel(failedModel)
+                await MainActor.run {
+                    modelManager.errorMessage = nil
+                    lastFailedModel = nil
+                }
+            } catch {
+                await MainActor.run {
+                    modelManager.errorMessage = "Retry failed: \(error.localizedDescription)"
+                }
             }
         }
     }
@@ -299,6 +324,8 @@ struct DownloadedModelRowView: View {
     let model: ModelInfo
     @StateObject private var modelManager = ModelManager.shared
     @State private var showingDeleteConfirmation = false
+    @State private var showingReinstallConfirmation = false
+    @State private var showingModelActions = false
     
     var body: some View {
         HStack {
@@ -306,20 +333,42 @@ struct DownloadedModelRowView: View {
                 Text(model.name)
                     .font(.headline)
                 
-                Text("Ready to use")
-                    .font(.caption)
-                    .foregroundColor(.green)
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                        .font(.caption)
+                    Text("Ready to use")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                }
+                
+                Text("Size: \(ByteCountFormatter.string(fromByteCount: model.fileSize, countStyle: .binary))")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
             }
             
             Spacer()
             
-            Button("Delete") {
-                showingDeleteConfirmation = true
+            Button(action: {
+                showingModelActions = true
+            }) {
+                Image(systemName: "ellipsis.circle")
+                    .font(.title2)
+                    .foregroundColor(.blue)
             }
-            .font(.caption)
-            .foregroundColor(.red)
         }
         .padding(.vertical, 4)
+        .confirmationDialog("Model Actions", isPresented: $showingModelActions) {
+            Button("Reinstall") {
+                showingReinstallConfirmation = true
+            }
+            Button("Delete", role: .destructive) {
+                showingDeleteConfirmation = true
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Choose an action for \(model.name)")
+        }
         .confirmationDialog("Delete Model", isPresented: $showingDeleteConfirmation) {
             Button("Delete", role: .destructive) {
                 do {
@@ -330,7 +379,31 @@ struct DownloadedModelRowView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("Are you sure you want to delete \(model.name)?")
+            Text("Are you sure you want to delete \(model.name)? This will free up \(ByteCountFormatter.string(fromByteCount: model.fileSize, countStyle: .binary)) of storage.")
+        }
+        .confirmationDialog("Reinstall Model", isPresented: $showingReinstallConfirmation) {
+            Button("Reinstall") {
+                reinstallModel()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This will delete and re-download \(model.name). The model will be unavailable during reinstallation.")
+        }
+    }
+    
+    private func reinstallModel() {
+        Task {
+            do {
+                // First delete the existing model
+                try modelManager.deleteModel(model)
+                
+                // Then download it again
+                try await modelManager.downloadModel(model)
+            } catch {
+                await MainActor.run {
+                    modelManager.errorMessage = "Reinstallation failed: \(error.localizedDescription)"
+                }
+            }
         }
     }
 }
