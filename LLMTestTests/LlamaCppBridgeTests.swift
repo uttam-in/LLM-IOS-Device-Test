@@ -9,11 +9,11 @@ import XCTest
 @testable import LLMTest
 
 final class LlamaCppBridgeTests: XCTestCase {
-    var bridge: LlamaCppBridge!
+    var bridge: MockLlamaCppBridge!
     
     override func setUp() {
         super.setUp()
-        bridge = LlamaCppBridge()
+        bridge = MockLlamaCppBridge()
     }
     
     override func tearDown() {
