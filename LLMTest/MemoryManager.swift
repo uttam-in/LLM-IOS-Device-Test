@@ -52,7 +52,9 @@ class MemoryManager: ObservableObject {
     }
     
     deinit {
-        stopMemoryMonitoring()
+        Task { @MainActor in
+            stopMemoryMonitoring()
+        }
         memoryPressureSource?.cancel()
     }
     
@@ -107,8 +109,8 @@ class MemoryManager: ObservableObject {
         
         // Log memory status if pressure level changed
         if previousLevel != memoryPressureLevel {
-            logger.info("Memory pressure level changed: \(previousLevel.rawValue) -> \(memoryPressureLevel.rawValue)")
-            logger.info("Memory usage: \(formatBytes(currentMemoryUsage)), Available: \(formatBytes(availableMemory))")
+            logger.info("Memory pressure level changed: \(previousLevel.rawValue) -> \(self.memoryPressureLevel.rawValue)")
+            logger.info("Memory usage: \(self.formatBytes(self.currentMemoryUsage)), Available: \(self.formatBytes(self.availableMemory))")
         }
         
         // Take action based on memory pressure
@@ -225,7 +227,7 @@ class MemoryManager: ObservableObject {
         logger.info("Memory cleanup completed")
     }
     
-    private func performLightMemoryCleanup() async {
+    func performLightMemoryCleanup() async {
         logger.info("Performing light memory cleanup")
         
         // Clear only non-essential caches
@@ -288,8 +290,8 @@ class MemoryManager: ObservableObject {
             totalMemory: memoryInfo.total,
             pressureLevel: memoryPressureLevel,
             isWarningActive: isMemoryWarningActive,
-            llamaWrapperMemory: llamaWrapper?.memoryUsage ?? 0,
-            gpuMemory: gpuAccelerator?.gpuMemoryUsage ?? 0,
+            llamaWrapperMemory: Int64(llamaWrapper?.memoryUsage ?? 0),
+            gpuMemory: Int64(gpuAccelerator?.gpuMemoryUsage ?? 0),
             lastCheckTime: lastMemoryCheck
         )
     }

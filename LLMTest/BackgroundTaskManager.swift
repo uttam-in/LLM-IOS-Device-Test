@@ -44,7 +44,9 @@ class BackgroundTaskManager: ObservableObject {
     }
     
     deinit {
-        endBackgroundTask()
+        Task { @MainActor in
+            endBackgroundTask()
+        }
         NotificationCenter.default.removeObserver(self)
     }
     
@@ -182,14 +184,14 @@ class BackgroundTaskManager: ObservableObject {
             }
         }
         
-        logger.info("Background task started: \(backgroundTaskID.rawValue)")
+        logger.info("Background task started: \(self.backgroundTaskID.rawValue)")
     }
     
     private func endBackgroundTask() {
         guard backgroundTaskID != .invalid else { return }
         
         UIApplication.shared.endBackgroundTask(backgroundTaskID)
-        logger.info("Background task ended: \(backgroundTaskID.rawValue)")
+        logger.info("Background task ended: \(self.backgroundTaskID.rawValue)")
         backgroundTaskID = .invalid
     }
     
@@ -265,7 +267,7 @@ class BackgroundTaskManager: ObservableObject {
     private func processPendingInferenceRequests() async {
         guard !pendingInferenceRequests.isEmpty else { return }
         
-        logger.info("Processing \(pendingInferenceRequests.count) pending inference requests")
+        logger.info("Processing \(self.pendingInferenceRequests.count) pending inference requests")
         
         for request in pendingInferenceRequests {
             await processInferenceRequest(request)

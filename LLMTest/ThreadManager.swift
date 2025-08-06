@@ -52,8 +52,9 @@ class ThreadManager: ObservableObject {
     init() {
         // Get system processor information
         processorCount = ProcessInfo.processInfo.processorCount
-        physicalCores = ProcessInfo.processInfo.physicalCores
-        logicalCores = ProcessInfo.processInfo.logicalCores
+        // ProcessInfo doesn't have physicalCores/logicalCores on iOS, use processorCount
+        physicalCores = ProcessInfo.processInfo.processorCount
+        logicalCores = ProcessInfo.processInfo.processorCount
         
         // Calculate optimal thread counts based on system capabilities
         maxConcurrentInferenceTasks = max(1, physicalCores - 1) // Leave one core for UI
@@ -89,9 +90,9 @@ class ThreadManager: ObservableObject {
         )
         
         logger.info("ThreadManager initialized")
-        logger.info("System: \(processorCount) processors, \(physicalCores) physical cores, \(logicalCores) logical cores")
-        logger.info("Max concurrent inference tasks: \(maxConcurrentInferenceTasks)")
-        logger.info("Max concurrent model tasks: \(maxConcurrentModelTasks)")
+        logger.info("System: \(self.processorCount) processors, \(self.physicalCores) physical cores, \(self.logicalCores) logical cores")
+        logger.info("Max concurrent inference tasks: \(self.maxConcurrentInferenceTasks)")
+        logger.info("Max concurrent model tasks: \(self.maxConcurrentModelTasks)")
         
         startPerformanceMonitoring()
     }
@@ -253,8 +254,13 @@ class ThreadManager: ObservableObject {
                     semaphore.wait()
                     defer { semaphore.signal() }
                     
-                    let result = try await self?.executeInferenceTask(operation: task) ?? task()
-                    return (index, result)
+                    if let strongSelf = self {
+                        let result = try await strongSelf.executeInferenceTask(operation: task)
+                        return (index, result)
+                    } else {
+                        let result = try await task()
+                        return (index, result)
+                    }
                 }
             }
             

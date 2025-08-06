@@ -46,7 +46,9 @@ class MetalGPUAccelerator: ObservableObject {
     }
     
     deinit {
-        cleanup()
+        Task { @MainActor in
+            cleanup()
+        }
     }
     
     private func setupMetal() {
@@ -123,16 +125,17 @@ class MetalGPUAccelerator: ObservableObject {
                     )
                     
                     // Create buffers
-                    let bufferA = try self?.createBuffer(from: matrixA, device: device)
-                    let bufferB = try self?.createBuffer(from: matrixB, device: device)
+                    guard let strongSelf = self else {
+                        throw MetalGPUError.gpuNotAvailable
+                    }
+                    let bufferA = try strongSelf.createBuffer(from: matrixA, device: device)
+                    let bufferB = try strongSelf.createBuffer(from: matrixB, device: device)
                     let resultBuffer = device.makeBuffer(
                         length: rowsA * columnsB * MemoryLayout<Float>.stride,
                         options: .storageModeShared
                     )
                     
-                    guard let bufferA = bufferA,
-                          let bufferB = bufferB,
-                          let resultBuffer = resultBuffer else {
+                    guard let resultBuffer = resultBuffer else {
                         throw MetalGPUError.bufferCreationFailed
                     }
                     
@@ -282,7 +285,7 @@ class MetalGPUAccelerator: ObservableObject {
                     commandBuffer.waitUntilCompleted()
                     
                     // Extract results (simplified)
-                    let result = Array(repeating: 0.0, count: outputChannels) // Placeholder
+                    let result = Array(repeating: Float(0.0), count: outputChannels) // Placeholder
                     
                     // Update performance metrics
                     let operationTime = CFAbsoluteTimeGetCurrent() - startTime

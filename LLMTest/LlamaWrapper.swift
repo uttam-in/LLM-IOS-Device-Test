@@ -207,7 +207,9 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
     
     deinit {
         bridge.unloadModel()
-        cleanupPerformanceComponents()
+        Task { @MainActor in
+            cleanupPerformanceComponents()
+        }
     }
     
     // MARK: - Performance Setup
@@ -264,25 +266,30 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
         
         return try await withCheckedThrowingContinuation { continuation in
             queue.async { [weak self] in
+                guard let strongSelf = self else {
+                    continuation.resume(throwing: LlamaWrapperError.modelLoadFailed("LlamaWrapper was deallocated"))
+                    return
+                }
+                
                 var error: NSError?
-                let success = self.bridge.loadModel(atPath: path, contextSize: Int32(contextSize), error: &error)
+                let success = strongSelf.bridge.loadModel(atPath: path, contextSize: Int32(contextSize), error: &error)
                 
                 Task { @MainActor in
                     if success {
-                        self.isModelLoaded = true
-                        self.currentModelPath = path
-                        self.config = LlamaConfig(
+                        strongSelf.isModelLoaded = true
+                        strongSelf.currentModelPath = path
+                        strongSelf.config = LlamaConfig(
                             contextSize: contextSize,
-                            threads: self.config.threads,
-                            gpuEnabled: self.gpuAccelerator.isGPUAvailable && self.config.gpuEnabled,
-                            temperature: self.config.temperature,
-                            topP: self.config.topP,
-                            maxTokens: self.config.maxTokens
+                            threads: strongSelf.config.threads,
+                            gpuEnabled: strongSelf.gpuAccelerator.isGPUAvailable && strongSelf.config.gpuEnabled,
+                            temperature: strongSelf.config.temperature,
+                            topP: strongSelf.config.topP,
+                            maxTokens: strongSelf.config.maxTokens
                         )
                         
                         // Update performance metrics
-                        self.performanceMetrics.modelLoadTime = CFAbsoluteTimeGetCurrent() - self.inferenceStartTime
-                        self.performanceMetrics.isGPUEnabled = self.config.gpuEnabled
+                        strongSelf.performanceMetrics.modelLoadTime = CFAbsoluteTimeGetCurrent() - strongSelf.inferenceStartTime
+                        strongSelf.performanceMetrics.isGPUEnabled = strongSelf.config.gpuEnabled
                         
                         continuation.resume()
                     } else {
@@ -295,25 +302,30 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
     }
     
     func unloadModel() async {
-        return await threadManager.executeModelLoadingTask { [weak self] in
-            guard let self = self else { return }
-            
-            return await withCheckedContinuation { continuation in
-                self.bridge.unloadModel()
+        do {
+            try await threadManager.executeModelLoadingTask { [weak self] in
+                guard let self = self else { return }
                 
-                Task { @MainActor in
-                    self.isModelLoaded = false
-                    self.currentModelPath = nil
+                return await withCheckedContinuation { continuation in
+                    self.bridge.unloadModel()
                     
-                    // Clear GPU memory
-                    self.gpuAccelerator.clearMemoryPool()
-                    
-                    // Update performance metrics
-                    self.performanceMetrics.reset()
-                    
-                    continuation.resume()
+                    Task { @MainActor in
+                        self.isModelLoaded = false
+                        self.currentModelPath = nil
+                        
+                        // Clear GPU memory
+                        self.gpuAccelerator.clearMemoryPool()
+                        
+                        // Update performance metrics
+                        self.performanceMetrics.reset()
+                        
+                        continuation.resume()
+                    }
                 }
             }
+        } catch {
+            // Handle error silently for unload operation
+            print("Error during model unload: \(error)")
         }
     }
     
@@ -349,26 +361,31 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
         
         return try await withCheckedThrowingContinuation { continuation in
             queue.async { [weak self] in
+                guard let strongSelf = self else {
+                    continuation.resume(throwing: LlamaWrapperError.inferenceError("LlamaWrapper was deallocated"))
+                    return
+                }
+                
                 var error: NSError?
                 
                 // Try GPU acceleration if available and enabled
                 let result: String?
-                if self.config.gpuEnabled && self.gpuAccelerator.isGPUEnabled {
+                if strongSelf.config.gpuEnabled && strongSelf.gpuAccelerator.isGPUEnabled {
                     // Use GPU-accelerated inference (simplified implementation)
-                    result = self.bridge.generateText(prompt, maxTokens: Int32(maxTokens), temperature: temperature, topP: topP, error: &error)
+                    result = strongSelf.bridge.generateText(prompt, maxTokens: Int32(maxTokens), temperature: temperature, topP: topP, error: &error)
                 } else {
                     // Use CPU inference
-                    result = self.bridge.generateText(prompt, maxTokens: Int32(maxTokens), temperature: temperature, topP: topP, error: &error)
+                    result = strongSelf.bridge.generateText(prompt, maxTokens: Int32(maxTokens), temperature: temperature, topP: topP, error: &error)
                 }
                 
                 Task { @MainActor in
                     if let result = result {
                         // Update performance metrics
-                        let inferenceTime = CFAbsoluteTimeGetCurrent() - self.inferenceStartTime
-                        self.performanceMetrics.lastInferenceTime = inferenceTime
-                        self.performanceMetrics.totalInferences += 1
-                        self.performanceMetrics.averageInferenceTime = 
-                            (self.performanceMetrics.averageInferenceTime * Double(self.performanceMetrics.totalInferences - 1) + inferenceTime) / Double(self.performanceMetrics.totalInferences)
+                        let inferenceTime = CFAbsoluteTimeGetCurrent() - strongSelf.inferenceStartTime
+                        strongSelf.performanceMetrics.lastInferenceTime = inferenceTime
+                        strongSelf.performanceMetrics.totalInferences += 1
+                        strongSelf.performanceMetrics.averageInferenceTime = 
+                            (strongSelf.performanceMetrics.averageInferenceTime * Double(strongSelf.performanceMetrics.totalInferences - 1) + inferenceTime) / Double(strongSelf.performanceMetrics.totalInferences)
                         
                         continuation.resume(returning: result)
                     } else {
@@ -507,7 +524,7 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
             return isModelLoaded
         }
         
-        guard try await modelLoaded.value else {
+        guard await modelLoaded.value else {
             throw LlamaWrapperError.noModelLoaded
         }
         
@@ -529,7 +546,7 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
             return isModelLoaded
         }
         
-        guard try await modelLoaded.value else {
+        guard await modelLoaded.value else {
             throw LlamaWrapperError.noModelLoaded
         }
         
