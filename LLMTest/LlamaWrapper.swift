@@ -7,6 +7,8 @@
 
 import Foundation
 import Combine
+import Metal
+import MetalPerformanceShaders
 
 // MARK: - Protocol Definition
 
@@ -164,7 +166,7 @@ class MockLlamaCppBridge {
 
 // MARK: - LlamaWrapper Implementation
 
-/// Swift wrapper for llama.cpp integration
+/// Swift wrapper for llama.cpp integration with performance optimizations
 @MainActor
 class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
     
@@ -176,8 +178,18 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
     
     // MARK: - Private Properties
     private let bridge: MockLlamaCppBridge
+    private let queue = DispatchQueue(label: "llama.inference", qos: .userInitiated)
     private var config: LlamaConfig
-    private let queue = DispatchQueue(label: "llama.wrapper", qos: .userInitiated)
+    
+    // Performance optimization components
+    private let memoryManager = MemoryManager()
+    private let threadManager = ThreadManager()
+    private let gpuAccelerator = MetalGPUAccelerator()
+    private let backgroundTaskManager = BackgroundTaskManager()
+    
+    // Performance monitoring
+    @Published var performanceMetrics: LlamaPerformanceMetrics = LlamaPerformanceMetrics()
+    private var inferenceStartTime: CFTimeInterval = 0
     
     // MARK: - Initialization
     
@@ -188,10 +200,44 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
         // Apply initial configuration
         bridge.setThreads(Int32(config.threads))
         bridge.setGPUEnabled(config.gpuEnabled)
+        
+        // Setup performance optimizations
+        setupPerformanceOptimizations()
     }
     
     deinit {
         bridge.unloadModel()
+        cleanupPerformanceComponents()
+    }
+    
+    // MARK: - Performance Setup
+    
+    private func setupPerformanceOptimizations() {
+        // Register components with each other
+        memoryManager.registerLlamaWrapper(self)
+        memoryManager.registerGPUAccelerator(gpuAccelerator)
+        backgroundTaskManager.registerLlamaWrapper(self)
+        backgroundTaskManager.registerMemoryManager(memoryManager)
+        
+        // Start monitoring
+        memoryManager.startMemoryMonitoring()
+        
+        // Configure GPU acceleration if available
+        if gpuAccelerator.isGPUAvailable {
+            config = LlamaConfig(
+                contextSize: config.contextSize,
+                threads: config.threads,
+                gpuEnabled: true,
+                temperature: config.temperature,
+                topP: config.topP,
+                maxTokens: config.maxTokens
+            )
+        }
+    }
+    
+    private func cleanupPerformanceComponents() {
+        memoryManager.stopMemoryMonitoring()
+        gpuAccelerator.clearMemoryPool()
     }
     
     // MARK: - Model Management
@@ -205,32 +251,41 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
             throw LlamaWrapperError.modelNotFound(path)
         }
         
+        // Check if inference is allowed (background state handling)
+        guard backgroundTaskManager.canPerformInference() else {
+            throw LlamaWrapperError.inferenceError("Model loading not allowed in current app state")
+        }
+        
+        // Check memory availability
+        let memoryInfo = memoryManager.getDetailedMemoryInfo()
+        if memoryInfo.pressureLevel == .critical {
+            throw LlamaWrapperError.outOfMemory
+        }
+        
         return try await withCheckedThrowingContinuation { continuation in
             queue.async { [weak self] in
-                guard let self = self else { 
-                    continuation.resume(throwing: LlamaWrapperError.bridgeError(NSError(domain: "LlamaWrapper", code: -1, userInfo: [NSLocalizedDescriptionKey: "Wrapper deallocated"])))
-                    return 
-                }
-                
                 var error: NSError?
                 let success = self.bridge.loadModel(atPath: path, contextSize: Int32(contextSize), error: &error)
                 
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     if success {
                         self.isModelLoaded = true
                         self.currentModelPath = path
                         self.config = LlamaConfig(
                             contextSize: contextSize,
                             threads: self.config.threads,
-                            gpuEnabled: self.config.gpuEnabled,
+                            gpuEnabled: self.gpuAccelerator.isGPUAvailable && self.config.gpuEnabled,
                             temperature: self.config.temperature,
                             topP: self.config.topP,
                             maxTokens: self.config.maxTokens
                         )
+                        
+                        // Update performance metrics
+                        self.performanceMetrics.modelLoadTime = CFAbsoluteTimeGetCurrent() - self.inferenceStartTime
+                        self.performanceMetrics.isGPUEnabled = self.config.gpuEnabled
+                        
                         continuation.resume()
                     } else {
-                        self.isModelLoaded = false
-                        self.currentModelPath = nil
                         let wrapperError = error.map { LlamaWrapperError.bridgeError($0) } ?? LlamaWrapperError.modelLoadFailed("Unknown error")
                         continuation.resume(throwing: wrapperError)
                     }
@@ -240,13 +295,22 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
     }
     
     func unloadModel() async {
-        return await withCheckedContinuation { continuation in
-            queue.async { [weak self] in
-                self?.bridge.unloadModel()
+        return await threadManager.executeModelLoadingTask { [weak self] in
+            guard let self = self else { return }
+            
+            return await withCheckedContinuation { continuation in
+                self.bridge.unloadModel()
                 
-                DispatchQueue.main.async {
-                    self?.isModelLoaded = false
-                    self?.currentModelPath = nil
+                Task { @MainActor in
+                    self.isModelLoaded = false
+                    self.currentModelPath = nil
+                    
+                    // Clear GPU memory
+                    self.gpuAccelerator.clearMemoryPool()
+                    
+                    // Update performance metrics
+                    self.performanceMetrics.reset()
+                    
                     continuation.resume()
                 }
             }
@@ -264,25 +328,48 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
             throw LlamaWrapperError.invalidParameters("Prompt cannot be empty")
         }
         
+        // Check if inference is allowed (background state handling)
+        guard backgroundTaskManager.canPerformInference() else {
+            throw LlamaWrapperError.inferenceError("Inference not allowed in current app state")
+        }
+        
+        // Check memory pressure
+        let memoryInfo = memoryManager.getDetailedMemoryInfo()
+        if memoryInfo.pressureLevel == .critical {
+            throw LlamaWrapperError.outOfMemory
+        }
+        
         isGenerating = true
-        defer { isGenerating = false }
+        inferenceStartTime = CFAbsoluteTimeGetCurrent()
+        
+        defer { 
+            isGenerating = false
+            updatePerformanceMetrics()
+        }
         
         return try await withCheckedThrowingContinuation { continuation in
             queue.async { [weak self] in
-                guard let self = self else {
-                    continuation.resume(throwing: LlamaWrapperError.bridgeError(NSError(domain: "LlamaWrapper", code: -1, userInfo: [NSLocalizedDescriptionKey: "Wrapper deallocated"])))
-                    return
+                var error: NSError?
+                
+                // Try GPU acceleration if available and enabled
+                let result: String?
+                if self.config.gpuEnabled && self.gpuAccelerator.isGPUEnabled {
+                    // Use GPU-accelerated inference (simplified implementation)
+                    result = self.bridge.generateText(prompt, maxTokens: Int32(maxTokens), temperature: temperature, topP: topP, error: &error)
+                } else {
+                    // Use CPU inference
+                    result = self.bridge.generateText(prompt, maxTokens: Int32(maxTokens), temperature: temperature, topP: topP, error: &error)
                 }
                 
-                var error: NSError?
-                let result = self.bridge.generateText(prompt,
-                                                    maxTokens: Int32(maxTokens),
-                                                    temperature: temperature,
-                                                    topP: topP,
-                                                    error: &error)
-                
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     if let result = result {
+                        // Update performance metrics
+                        let inferenceTime = CFAbsoluteTimeGetCurrent() - self.inferenceStartTime
+                        self.performanceMetrics.lastInferenceTime = inferenceTime
+                        self.performanceMetrics.totalInferences += 1
+                        self.performanceMetrics.averageInferenceTime = 
+                            (self.performanceMetrics.averageInferenceTime * Double(self.performanceMetrics.totalInferences - 1) + inferenceTime) / Double(self.performanceMetrics.totalInferences)
+                        
                         continuation.resume(returning: result)
                     } else {
                         let wrapperError = error.map { LlamaWrapperError.bridgeError($0) } ?? LlamaWrapperError.inferenceError("Unknown error")
@@ -490,4 +577,74 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
     func resetConfig() {
         updateConfig(.default)
     }
+    
+    // MARK: - Performance Metrics
+    
+    private func updatePerformanceMetrics() {
+        let memoryInfo = memoryManager.getDetailedMemoryInfo()
+        let threadMetrics = threadManager.getPerformanceMetrics()
+        let gpuInfo = gpuAccelerator.getGPUInfo()
+        
+        performanceMetrics.memoryUsage = memoryInfo.currentUsage
+        performanceMetrics.memoryPressure = memoryInfo.pressureLevel
+        performanceMetrics.threadUtilization = threadMetrics.threadUtilization
+        performanceMetrics.gpuMemoryUsage = gpuInfo.memoryUsage
+        performanceMetrics.activeThreads = threadMetrics.activeInferenceThreads
+    }
+    
+    func getPerformanceMetrics() -> LlamaPerformanceMetrics {
+        updatePerformanceMetrics()
+        return performanceMetrics
+    }
+    
+    func getDetailedPerformanceInfo() -> DetailedPerformanceInfo {
+        let memoryInfo = memoryManager.getDetailedMemoryInfo()
+        let threadInfo = threadManager.getDetailedThreadInfo()
+        let gpuInfo = gpuAccelerator.getGPUInfo()
+        let appStateInfo = backgroundTaskManager.getAppStateInfo()
+        
+        return DetailedPerformanceInfo(
+            llamaMetrics: performanceMetrics,
+            memoryInfo: memoryInfo,
+            threadInfo: threadInfo,
+            gpuInfo: gpuInfo,
+            appStateInfo: appStateInfo
+        )
+    }
+}
+
+// MARK: - Performance Metrics Structures
+
+struct LlamaPerformanceMetrics {
+    var modelLoadTime: TimeInterval = 0
+    var lastInferenceTime: TimeInterval = 0
+    var averageInferenceTime: TimeInterval = 0
+    var totalInferences: Int = 0
+    var memoryUsage: Int64 = 0
+    var memoryPressure: MemoryPressureLevel = .normal
+    var threadUtilization: Double = 0
+    var gpuMemoryUsage: Int64 = 0
+    var activeThreads: Int = 0
+    var isGPUEnabled: Bool = false
+    
+    mutating func reset() {
+        modelLoadTime = 0
+        lastInferenceTime = 0
+        averageInferenceTime = 0
+        totalInferences = 0
+        memoryUsage = 0
+        memoryPressure = .normal
+        threadUtilization = 0
+        gpuMemoryUsage = 0
+        activeThreads = 0
+        isGPUEnabled = false
+    }
+}
+
+struct DetailedPerformanceInfo {
+    let llamaMetrics: LlamaPerformanceMetrics
+    let memoryInfo: DetailedMemoryInfo
+    let threadInfo: DetailedThreadInfo
+    let gpuInfo: GPUInfo
+    let appStateInfo: AppStateInfo
 }
