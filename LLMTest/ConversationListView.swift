@@ -57,7 +57,15 @@ struct ConversationListView: View {
             .navigationTitle("Chats")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: { showingSettings = true }) {
+                    Menu {
+                        Button("Settings") {
+                            showingSettings = true
+                        }
+                        
+                        NavigationLink(destination: ModelDownloadView()) {
+                            Label("Manage Models", systemImage: "arrow.down.circle")
+                        }
+                    } label: {
                         Image(systemName: "gearshape")
                     }
                 }

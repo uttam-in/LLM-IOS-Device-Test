@@ -69,7 +69,7 @@ class ChatManager: ObservableObject {
     }
     
     /// Get current model information
-    func getModelInfo() -> ModelInfo {
+    func getModelInfo() -> LlamaModelInfo {
         return llamaWrapper.getModelInfo()
     }
     
@@ -209,11 +209,10 @@ class ChatManager: ObservableObject {
                 storageManager.updateMessage(aiMessage, content: fullResponse)
             }
             
-            // Update final metadata
+            // Update final content
             storageManager.updateMessage(
                 aiMessage,
-                content: fullResponse,
-                metadata: createResponseMetadata(for: fullResponse)
+                content: fullResponse
             )
             
         } catch {

@@ -91,15 +91,75 @@ struct LlamaConfig {
     )
 }
 
-// MARK: - Model Information
+// MARK: - Llama Model Information
 
-struct ModelInfo {
+struct LlamaModelInfo {
     let vocabularySize: Int
     let contextSize: Int
     let embeddingSize: Int
     let memoryUsage: Int
     let isLoaded: Bool
     let modelPath: String?
+}
+
+// MARK: - Mock Bridge (Temporary)
+
+class MockLlamaCppBridge {
+    private var modelLoaded = false
+    private var threads: Int32 = 4
+    private var gpuEnabled = false
+    
+    func loadModel(atPath path: String, contextSize: Int32, error: inout NSError?) -> Bool {
+        // Mock implementation
+        modelLoaded = true
+        return true
+    }
+    
+    func unloadModel() {
+        modelLoaded = false
+    }
+    
+    func isModelLoaded() -> Bool {
+        return modelLoaded
+    }
+    
+    func generateText(_ prompt: String, maxTokens: Int32, temperature: Float, topP: Float, error: inout NSError?) -> String? {
+        // Mock response
+        return "This is a mock response to: \(prompt)"
+    }
+    
+    func getVocabularySize() -> Int32 { return 32000 }
+    func getContextSize() -> Int32 { return 2048 }
+    func getEmbeddingSize() -> Int32 { return 4096 }
+    func getMemoryUsage() -> Int32 { return 1024 * 1024 * 1024 } // 1GB
+    
+    func setThreads(_ count: Int32) {
+        threads = count
+    }
+    
+    func setGPUEnabled(_ enabled: Bool) {
+        gpuEnabled = enabled
+    }
+    
+    func clearKVCache() {
+        // Mock implementation
+    }
+    
+    func tokenizeText(_ text: String, error: inout NSError?) -> [NSNumber]? {
+        // Mock tokenization - split by spaces and assign arbitrary token IDs
+        let words = text.components(separatedBy: " ")
+        return words.enumerated().map { NSNumber(value: $0.offset + 1) }
+    }
+    
+    func detokenizeTokenIds(_ tokenIds: [NSNumber], error: inout NSError?) -> String? {
+        // Mock detokenization
+        return tokenIds.map { "token\($0.intValue)" }.joined(separator: " ")
+    }
+    
+    func generateTextStream(withPrompt prompt: String, maxTokens: Int32, temperature: Float, topP: Float, error: inout NSError?) -> Bool {
+        // Mock streaming implementation - just return success
+        return true
+    }
 }
 
 // MARK: - LlamaWrapper Implementation
@@ -115,14 +175,14 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
     @Published var errorMessage: String?
     
     // MARK: - Private Properties
-    private let bridge: LlamaCppBridge
+    private let bridge: MockLlamaCppBridge
     private var config: LlamaConfig
     private let queue = DispatchQueue(label: "llama.wrapper", qos: .userInitiated)
     
     // MARK: - Initialization
     
     init(config: LlamaConfig = .default) {
-        self.bridge = LlamaCppBridge()
+        self.bridge = MockLlamaCppBridge()
         self.config = config
         
         // Apply initial configuration
@@ -215,7 +275,7 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
                 }
                 
                 var error: NSError?
-                let result = self.bridge.generateText(withPrompt: prompt,
+                let result = self.bridge.generateText(prompt,
                                                     maxTokens: Int32(maxTokens),
                                                     temperature: temperature,
                                                     topP: topP,
@@ -259,18 +319,16 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
                                                                maxTokens: Int32(maxTokens),
                                                                temperature: temperature,
                                                                topP: topP,
-                                                               callback: { token, isComplete in
-                        if !token.isEmpty {
-                            continuation.yield(token)
+                                                               error: &error)
+                    
+                    // Mock streaming - just yield a single response and finish
+                    if success {
+                        continuation.yield("This is a mock streaming response to: \(prompt)")
+                        Task { @MainActor in
+                            self.isGenerating = false
                         }
-                        
-                        if isComplete {
-                            Task { @MainActor in
-                                self.isGenerating = false
-                            }
-                            continuation.finish()
-                        }
-                    }, error: &error)
+                        continuation.finish()
+                    }
                     
                     if !success {
                         Task { @MainActor in
@@ -286,24 +344,24 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
     
     // MARK: - Model Information
     
-    nonisolated var vocabularySize: Int {
+    var vocabularySize: Int {
         return Int(bridge.getVocabularySize())
     }
     
-    nonisolated var contextSize: Int {
+    var contextSize: Int {
         return Int(bridge.getContextSize())
     }
     
-    nonisolated var embeddingSize: Int {
+    var embeddingSize: Int {
         return Int(bridge.getEmbeddingSize())
     }
     
-    nonisolated var memoryUsage: Int {
+    var memoryUsage: Int {
         return Int(bridge.getMemoryUsage())
     }
     
-    func getModelInfo() -> ModelInfo {
-        return ModelInfo(
+    func getModelInfo() -> LlamaModelInfo {
+        return LlamaModelInfo(
             vocabularySize: vocabularySize,
             contextSize: contextSize,
             embeddingSize: embeddingSize,
@@ -315,7 +373,7 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
     
     // MARK: - Configuration
     
-    nonisolated func setThreads(_ count: Int) {
+    func setThreads(_ count: Int) {
         let clampedCount = max(1, min(count, 16))
         bridge.setThreads(Int32(clampedCount))
         Task { @MainActor in
@@ -330,7 +388,7 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
         }
     }
     
-    nonisolated func setGPUEnabled(_ enabled: Bool) {
+    func setGPUEnabled(_ enabled: Bool) {
         bridge.setGPUEnabled(enabled)
         Task { @MainActor in
             config = LlamaConfig(
@@ -344,7 +402,7 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
         }
     }
     
-    nonisolated func clearCache() {
+    func clearCache() {
         bridge.clearKVCache()
     }
     
@@ -356,7 +414,7 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
     
     // MARK: - Tokenization
     
-    nonisolated func tokenize(_ text: String) async throws -> [Int] {
+    func tokenize(_ text: String) async throws -> [Int] {
         // Note: We check isModelLoaded in a Task since it's @MainActor isolated
         let modelLoaded = Task { @MainActor in
             return isModelLoaded
@@ -367,14 +425,18 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
         }
         
         var error: NSError?
-        guard let tokenIds = bridge.tokenizeText(text, error: &error) else {
+        let tokenIds = await Task { @MainActor in
+            return bridge.tokenizeText(text, error: &error)
+        }.value
+        
+        guard let tokenIds = tokenIds else {
             throw error.map { LlamaWrapperError.bridgeError($0) } ?? LlamaWrapperError.tokenizationFailed("Unknown error")
         }
         
         return tokenIds.compactMap { $0.intValue }
     }
     
-    nonisolated func detokenize(_ tokens: [Int]) async throws -> String {
+    func detokenize(_ tokens: [Int]) async throws -> String {
         // Note: We check isModelLoaded in a Task since it's @MainActor isolated
         let modelLoaded = Task { @MainActor in
             return isModelLoaded
@@ -386,7 +448,11 @@ class LlamaWrapper: ObservableObject, @preconcurrency LLMInferenceEngine {
         
         let tokenNumbers = tokens.map { NSNumber(value: $0) }
         var error: NSError?
-        guard let text = bridge.detokenizeTokenIds(tokenNumbers, error: &error) else {
+        let text = await Task { @MainActor in
+            return bridge.detokenizeTokenIds(tokenNumbers, error: &error)
+        }.value
+        
+        guard let text = text else {
             throw error.map { LlamaWrapperError.bridgeError($0) } ?? LlamaWrapperError.tokenizationFailed("Unknown error")
         }
         
