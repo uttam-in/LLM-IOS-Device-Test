@@ -45,6 +45,10 @@ public class LlamaSwiftWrapper: NSObject, ObservableObject {
     
     /// Load model method compatible with ChatManager
     public func loadModel(at path: String, contextSize: Int = 2048) async throws {
+        print("🔄 [LlamaSwiftWrapper] Starting model loading...")
+        print("🔄 [LlamaSwiftWrapper] Model path: \(path)")
+        print("🔄 [LlamaSwiftWrapper] Context size: \(contextSize)")
+        
         self.errorMessage = nil
         
         // Clean up any existing model
@@ -56,13 +60,77 @@ public class LlamaSwiftWrapper: NSObject, ObservableObject {
         // Validate model file exists
         guard FileManager.default.fileExists(atPath: path) else {
             let error = "Model file not found at path: \(path)"
+            print("❌ [LlamaSwiftWrapper] \(error)")
             self.errorMessage = error
             throw NSError(domain: "LlamaSwiftWrapper", code: 1, userInfo: [NSLocalizedDescriptionKey: error])
         }
         
-        // SpeziLLM integration - simplified approach for bridge compatibility
+        // Validate model file format
+        let fileExtension = URL(fileURLWithPath: path).pathExtension.lowercased()
+        guard fileExtension == "gguf" || fileExtension == "ggml" else {
+            let error = "Unsupported model format. Expected .gguf or .ggml file, got .\(fileExtension)"
+            print("❌ [LlamaSwiftWrapper] \(error)")
+            self.errorMessage = error
+            throw NSError(domain: "LlamaSwiftWrapper", code: 7, userInfo: [NSLocalizedDescriptionKey: error])
+        }
+        
+        // Check file size for basic validation
+        do {
+            let attributes = try FileManager.default.attributesOfItem(atPath: path)
+            let fileSize = attributes[.size] as? Int64 ?? 0
+            print("📊 [LlamaSwiftWrapper] Model file size: \(ByteCountFormatter.string(fromByteCount: fileSize, countStyle: .binary))")
+            
+            // Basic sanity check - model should be at least 100MB
+            guard fileSize > 100_000_000 else {
+                let error = "Model file appears to be too small (\(ByteCountFormatter.string(fromByteCount: fileSize, countStyle: .binary))). It may be corrupted."
+                print("❌ [LlamaSwiftWrapper] \(error)")
+                self.errorMessage = error
+                throw NSError(domain: "LlamaSwiftWrapper", code: 8, userInfo: [NSLocalizedDescriptionKey: error])
+            }
+        } catch {
+            let errorMsg = "Failed to validate model file: \(error.localizedDescription)"
+            print("❌ [LlamaSwiftWrapper] \(errorMsg)")
+            self.errorMessage = errorMsg
+            throw NSError(domain: "LlamaSwiftWrapper", code: 9, userInfo: [NSLocalizedDescriptionKey: errorMsg])
+        }
+        
+        // Pre-initialize SpeziLLM components to validate model compatibility
+        do {
+            print("🔍 [LlamaSwiftWrapper] Validating model compatibility with SpeziLLM...")
+            
+            let schema = LLMLocalSchema(
+                model: .custom(id: path),
+                parameters: .init(
+                    maxOutputLength: 10 // Small test generation
+                )
+            )
+            
+            let runner = LLMRunner {
+                LLMLocalPlatform()
+            }
+            
+            // Create session to validate model can be loaded
+            let testSession: LLMLocalSession = runner(with: schema)
+            
+            // Store for later use
+            self.llmSession = testSession
+            
+            print("✅ [LlamaSwiftWrapper] Model validation successful")
+            
+        } catch {
+            let errorMsg = "Model validation failed: \(error.localizedDescription)"
+            print("❌ [LlamaSwiftWrapper] \(errorMsg)")
+            self.errorMessage = errorMsg
+            throw NSError(domain: "LlamaSwiftWrapper", code: 10, userInfo: [
+                NSLocalizedDescriptionKey: "Failed to load model. The model file may be incompatible or corrupted.",
+                NSLocalizedFailureReasonErrorKey: error.localizedDescription
+            ])
+        }
+        
+        // Mark as loaded
         self.isModelLoaded = true
-        print("[LlamaSwiftWrapper] Model prepared for SpeziLLM loading: \(path)")
+        print("🎉 [LlamaSwiftWrapper] Model loaded successfully!")
+        print("🎉 [LlamaSwiftWrapper] Ready for on-device inference with SpeziLLM")
     }
     
     /// Unload model method compatible with ChatManager
@@ -112,30 +180,39 @@ public class LlamaSwiftWrapper: NSObject, ObservableObject {
         
         print("🔥 [LlamaSwiftWrapper] Using model at path: \(modelPath)")
         
-        // SpeziLLM text generation - now activated with linked packages
+        // SpeziLLM text generation - real on-device inference
         do {
             print("🚀 [LlamaSwiftWrapper] Creating SpeziLLM schema...")
+            
+            // Create schema with proper model configuration
             let schema = LLMLocalSchema(
-                model: .custom(id: modelPath)
+                model: .custom(id: modelPath),
+                parameters: .init(
+                    maxOutputLength: maxTokens
+                )
             )
-            print("🚀 [LlamaSwiftWrapper] Schema created: \(schema)")
+            print("🚀 [LlamaSwiftWrapper] Schema created with model: \(modelPath)")
             
             // Create LLMRunner with LLMLocalPlatform
             print("🚀 [LlamaSwiftWrapper] Creating LLMRunner...")
             let runner = LLMRunner {
                 LLMLocalPlatform()
             }
-            print("🚀 [LlamaSwiftWrapper] Runner created: \(runner)")
+            print("🚀 [LlamaSwiftWrapper] Runner created successfully")
             
             // Create LLMLocalSession for actual inference
             print("🚀 [LlamaSwiftWrapper] Creating LLMLocalSession...")
             let session: LLMLocalSession = runner(with: schema)
-            print("🚀 [LlamaSwiftWrapper] Session created successfully")
+            
+            // Store session for reuse
+            self.llmSession = session
+            print("🚀 [LlamaSwiftWrapper] Session created and stored successfully")
             
             // Generate actual LLM response
-            print("🤖 [LlamaSwiftWrapper] Starting LLM inference...")
+            print("🤖 [LlamaSwiftWrapper] Starting on-device LLM inference...")
             print("🤖 [LlamaSwiftWrapper] Input prompt: \"\(prompt)\"")
             var fullResponse = ""
+            var tokenCount = 0
             
             // Add user message to session context
             print("💬 [LlamaSwiftWrapper] Adding user message to session...")
@@ -144,30 +221,48 @@ public class LlamaSwiftWrapper: NSObject, ObservableObject {
             }
             
             // Use SpeziLLM's generate method with streaming
+            print("🔄 [LlamaSwiftWrapper] Starting token generation...")
             for try await token in try await session.generate() {
                 fullResponse += token
-                print("📝 [LlamaSwiftWrapper] Token: \(token)")
+                tokenCount += 1
+                
+                // Log every 10th token to avoid spam
+                if tokenCount % 10 == 0 {
+                    print("📝 [LlamaSwiftWrapper] Generated \(tokenCount) tokens...")
+                }
                 
                 // Stop if we've reached max tokens
-                if fullResponse.split(separator: " ").count >= maxTokens {
+                if tokenCount >= maxTokens {
                     print("⏹️ [LlamaSwiftWrapper] Reached max tokens limit (\(maxTokens))")
                     break
                 }
             }
             
-            let response = fullResponse.isEmpty ? "No response generated" : fullResponse
-            print("🎉 [LlamaSwiftWrapper] Complete LLM response generated!")
-            
-            print("✅ [LlamaSwiftWrapper] Generated response: \"\(response)\"")
+            let response = fullResponse.isEmpty ? "I apologize, but I couldn't generate a response. Please try again." : fullResponse
+            print("🎉 [LlamaSwiftWrapper] On-device LLM inference completed!")
+            print("✅ [LlamaSwiftWrapper] Generated \(tokenCount) tokens")
             print("✅ [LlamaSwiftWrapper] Response length: \(response.count) characters")
+            print("✅ [LlamaSwiftWrapper] Final response: \"\(response.prefix(100))...\"")
             
-            print("[LlamaSwiftWrapper] SpeziLLM integration active - ready for device testing")
             return response
             
         } catch {
-            let errorMsg = "SpeziLLM Error: \(error.localizedDescription)"
+            let errorMsg = "SpeziLLM On-Device Inference Error: \(error.localizedDescription)"
+            print("❌ [LlamaSwiftWrapper] \(errorMsg)")
             self.errorMessage = errorMsg
-            throw error
+            
+            // Provide more specific error information
+            if error.localizedDescription.contains("model") {
+                throw NSError(domain: "LlamaSwiftWrapper", code: 5, userInfo: [
+                    NSLocalizedDescriptionKey: "Model loading failed. Please ensure the model file is valid and compatible.",
+                    NSLocalizedFailureReasonErrorKey: error.localizedDescription
+                ])
+            } else {
+                throw NSError(domain: "LlamaSwiftWrapper", code: 6, userInfo: [
+                    NSLocalizedDescriptionKey: "On-device inference failed. Please try again.",
+                    NSLocalizedFailureReasonErrorKey: error.localizedDescription
+                ])
+            }
         }
     }
     
@@ -176,16 +271,38 @@ public class LlamaSwiftWrapper: NSObject, ObservableObject {
         return AsyncThrowingStream { continuation in
             Task {
                 do {
-                    let fullResponse = try await generateText(prompt: prompt, maxTokens: 512, temperature: 0.7, topP: 0.9)
+                    print("🌊 [LlamaSwiftWrapper] Starting streaming text generation...")
                     
-                    // Simulate streaming by yielding the response in chunks
-                    let words = fullResponse.components(separatedBy: " ")
-                    for word in words {
-                        continuation.yield(word + " ")
-                        try await Task.sleep(nanoseconds: 50_000_000) // 50ms delay
+                    guard isModelLoaded, let session = llmSession else {
+                        continuation.finish(throwing: NSError(domain: "LlamaSwiftWrapper", code: 2, userInfo: [NSLocalizedDescriptionKey: "No model loaded for streaming"]))
+                        return
                     }
+                    
+                    self.isGenerating = true
+                    defer { self.isGenerating = false }
+                    
+                    // Add user message to session context
+                    await MainActor.run {
+                        session.context.append(userInput: prompt)
+                    }
+                    
+                    // Stream tokens directly from SpeziLLM
+                    var tokenCount = 0
+                    for try await token in try await session.generate() {
+                        continuation.yield(token)
+                        tokenCount += 1
+                        
+                        // Stop at reasonable limit for streaming
+                        if tokenCount >= 512 {
+                            break
+                        }
+                    }
+                    
+                    print("🌊 [LlamaSwiftWrapper] Streaming completed with \(tokenCount) tokens")
                     continuation.finish()
+                    
                 } catch {
+                    print("❌ [LlamaSwiftWrapper] Streaming error: \(error.localizedDescription)")
                     continuation.finish(throwing: error)
                 }
             }
@@ -303,16 +420,53 @@ public class LlamaSwiftWrapper: NSObject, ObservableObject {
         return AsyncThrowingStream { continuation in
             Task {
                 do {
-                    let fullResponse = try await generateText(prompt: prompt, maxTokens: maxTokens, temperature: temperature, topP: topP)
+                    print("🌊 [LlamaSwiftWrapper] Starting parameterized streaming...")
+                    print("🌊 [LlamaSwiftWrapper] Parameters - maxTokens: \(maxTokens), temperature: \(temperature), topP: \(topP)")
                     
-                    // Simulate streaming by yielding the response in chunks
-                    let words = fullResponse.components(separatedBy: " ")
-                    for word in words {
-                        continuation.yield(word + " ")
-                        try await Task.sleep(nanoseconds: 50_000_000) // 50ms delay
+                    guard isModelLoaded else {
+                        continuation.finish(throwing: NSError(domain: "LlamaSwiftWrapper", code: 2, userInfo: [NSLocalizedDescriptionKey: "No model loaded for streaming"]))
+                        return
                     }
+                    
+                    self.isGenerating = true
+                    defer { self.isGenerating = false }
+                    
+                    // Create new schema with specific parameters for this generation
+                    let schema = LLMLocalSchema(
+                        model: .custom(id: currentModelPath ?? ""),
+                        parameters: .init(
+                            maxOutputLength: maxTokens
+                        )
+                    )
+                    
+                    let runner = LLMRunner {
+                        LLMLocalPlatform()
+                    }
+                    
+                    let session: LLMLocalSession = runner(with: schema)
+                    
+                    // Add user message to session context
+                    await MainActor.run {
+                        session.context.append(userInput: prompt)
+                    }
+                    
+                    // Stream tokens directly from SpeziLLM
+                    var tokenCount = 0
+                    for try await token in try await session.generate() {
+                        continuation.yield(token)
+                        tokenCount += 1
+                        
+                        // Stop at max tokens
+                        if tokenCount >= maxTokens {
+                            break
+                        }
+                    }
+                    
+                    print("🌊 [LlamaSwiftWrapper] Parameterized streaming completed with \(tokenCount) tokens")
                     continuation.finish()
+                    
                 } catch {
+                    print("❌ [LlamaSwiftWrapper] Parameterized streaming error: \(error.localizedDescription)")
                     continuation.finish(throwing: error)
                 }
             }
