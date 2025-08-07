@@ -273,7 +273,25 @@ class ModelManager: NSObject, ObservableObject {
             skipChecksumVerification: true // Enable for development until we get the real checksum
         )
         
-        availableModels = [gemma2B]
+        let qwen3_0_6B = ModelInfo(
+            id: "qwen3-0.6b-gguf",
+            name: "Qwen3 0.6B",
+            description: "Qwen3-0.6B is a compact language model with thinking mode support. Features 32K context length, multilingual capabilities, and excellent reasoning performance.",
+            downloadURL: URL(string: "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q8_0.gguf")!,
+            fallbackURLs: [
+                URL(string: "https://cdn-lfs.huggingface.co/repos/Qwen/Qwen3-0.6B-GGUF/Qwen3-0.6B-Q8_0.gguf")!,
+                URL(string: "https://huggingface.co/ggml-org/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q8_0.gguf")! // Alternative mirror
+            ],
+            fileSize: 670_040_064, // ~639MB (actual size from HF)
+            checksum: nil, // Will be determined dynamically or skipped for development
+            checksumType: .sha256,
+            version: "1.0.0",
+            requiredRAM: 1_073_741_824, // 1GB (smaller model)
+            supportedPlatforms: ["iOS", "macOS"],
+            skipChecksumVerification: true // Enable for development until we get the real checksum
+        )
+        
+        availableModels = [gemma2B, qwen3_0_6B]
     }
     
     private func loadDownloadedModels() {

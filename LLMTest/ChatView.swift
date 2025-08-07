@@ -11,6 +11,11 @@ struct ChatView: View {
     @StateObject private var chatManager = ChatManager.shared
     @State private var messageText = ""
     @State private var showingSettings = false
+    @State private var showingNavigationMenu = false
+    @State private var showingModelDownload = false
+    @State private var showingConversationList = false
+    @State private var showingDevicePerformance = false
+    @State private var showingExport = false
     @FocusState private var isInputFocused: Bool
     
     let conversation: Conversation
@@ -74,14 +79,50 @@ struct ChatView: View {
         .navigationTitle(conversation.title ?? "Chat")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: { showingNavigationMenu = true }) {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.title3)
+                }
+            }
+            
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: { showingSettings = true }) {
                     Image(systemName: "gearshape")
+                        .font(.title3)
                 }
             }
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
+        }
+        .sheet(isPresented: $showingNavigationMenu) {
+            NavigationMenuView(
+                showingModelDownload: $showingModelDownload,
+                showingConversationList: $showingConversationList,
+                showingDevicePerformance: $showingDevicePerformance,
+                showingExport: $showingExport,
+                showingSettings: $showingSettings
+            )
+        }
+        .sheet(isPresented: $showingModelDownload) {
+            NavigationView {
+                ModelDownloadView()
+            }
+        }
+        .sheet(isPresented: $showingConversationList) {
+            NavigationView {
+                ConversationListView()
+            }
+        }
+        .sheet(isPresented: $showingDevicePerformance) {
+            NavigationView {
+                DevicePerformanceView()
+            }
+        }
+        .sheet(isPresented: $showingExport) {
+            // Use the ExportView from SettingsView
+            ExportView()
         }
         .onTapGesture {
             // Dismiss keyboard when tapping outside
@@ -176,6 +217,8 @@ struct TypingIndicatorView: View {
         }
     }
 }
+
+
 
 #Preview {
     NavigationView {
