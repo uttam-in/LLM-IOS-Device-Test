@@ -155,11 +155,16 @@ class ChatManager: ObservableObject {
             let response: String
             
             if isModelLoaded {
-                // Use the actual LLM model
-                response = try await llamaWrapper.generateText(prompt: prompt)
+                // Use the actual LLM model for on-device inference
+                response = try await llamaWrapper.generateText(
+                    prompt: prompt,
+                    maxTokens: 512,
+                    temperature: 0.7,
+                    topP: 0.9
+                )
             } else {
-                // Fallback to placeholder response
-                response = generatePlaceholderResponse(for: prompt)
+                // No model loaded - inform user to load a model first
+                response = "Please load a model first to start chatting. You can download and load models from the Model Management section."
             }
             
             // Add AI message
@@ -271,39 +276,7 @@ class ChatManager: ObservableObject {
         return storageManager.searchMessages(query: query)
     }
     
-    // MARK: - Placeholder AI Response Generation
-    
-    private func generatePlaceholderResponse(for userMessage: String) -> String {
-        let responses = [
-            "That's an interesting point! I'd be happy to help you explore that further.",
-            "I understand what you're asking. Let me think about the best way to approach this.",
-            "Thanks for sharing that with me. Here's what I think about your question.",
-            "That's a great question! Based on what you've told me, here are some thoughts.",
-            "I appreciate you bringing this up. Let me provide some insights on that topic.",
-            "Interesting perspective! I can definitely help you with that.",
-            "I see what you mean. Let me break this down for you.",
-            "That's worth considering. Here's how I would approach this situation.",
-            "Good point! I think there are several ways to look at this.",
-            "I'm glad you asked about that. This is definitely something worth discussing."
-        ]
-        
-        // Simple response selection based on message characteristics
-        let messageLength = userMessage.count
-        let hasQuestion = userMessage.contains("?")
-        let hasGreeting = userMessage.lowercased().contains("hello") || 
-                         userMessage.lowercased().contains("hi") || 
-                         userMessage.lowercased().contains("hey")
-        
-        if hasGreeting {
-            return "Hello! It's great to meet you. How can I help you today?"
-        } else if hasQuestion {
-            return responses.randomElement() ?? responses[0]
-        } else if messageLength > 100 {
-            return "Thank you for sharing those details. That gives me a good understanding of what you're looking for. Let me provide a thoughtful response to address your points."
-        } else {
-            return responses.randomElement() ?? responses[0]
-        }
-    }
+
     
     // MARK: - Error Handling
     

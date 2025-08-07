@@ -8,6 +8,9 @@
 #ifndef LLMTest_Bridging_Header_h
 #define LLMTest_Bridging_Header_h
 
+// Import llama.cpp C headers for on-device LLM inference
+#include "llama.h"
+
 // Import Objective-C++ bridge for llama.cpp integration
 #import "LlamaCppBridge.h"
 
