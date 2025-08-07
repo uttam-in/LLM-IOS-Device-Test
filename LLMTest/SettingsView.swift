@@ -95,6 +95,18 @@ struct SettingsView: View {
                     }
                 }
                 
+                Section("Performance") {
+                    NavigationLink(destination: DevicePerformanceView()) {
+                        HStack {
+                            Label("Device Performance", systemImage: "speedometer")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .foregroundColor(.secondary)
+                                .font(.caption)
+                        }
+                    }
+                }
+                
                 Section("Data") {
                     Button("Export Conversations") {
                         showingExportSheet = true
