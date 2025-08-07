@@ -194,7 +194,7 @@ struct ModelSelectorView: View {
             // Set currently loaded model as selected if available
             if chatManager.isModelLoaded {
                 let currentModelInfo = chatManager.getModelInfo()
-                if let modelPath = currentModelInfo.modelPath {
+                if let modelPath = currentModelInfo["modelPath"] as? String, !modelPath.isEmpty {
                     let modelFileName = URL(fileURLWithPath: modelPath).lastPathComponent
                     selectedModel = modelManager.availableModels.first { model in
                         modelFileName.contains(model.id)
@@ -260,7 +260,7 @@ struct ModelSelectorView: View {
     private func getCurrentModelDisplayName() -> String {
         if chatManager.isModelLoaded {
             let modelInfo = chatManager.getModelInfo()
-            if let modelPath = modelInfo.modelPath {
+            if let modelPath = modelInfo["modelPath"] as? String, !modelPath.isEmpty {
                 let modelName = URL(fileURLWithPath: modelPath).lastPathComponent
                 return modelName.replacingOccurrences(of: ".gguf", with: "")
             } else {

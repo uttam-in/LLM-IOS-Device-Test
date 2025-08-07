@@ -19,7 +19,7 @@ class ChatManager: ObservableObject {
     @Published var isModelLoaded = false
     
     private let storageManager = StorageManager.shared
-    private let llamaWrapper = LlamaWrapper()
+    private let llamaWrapper = LlamaSwiftWrapper()
     private var cancellables = Set<AnyCancellable>()
     
     private init() {
@@ -69,7 +69,7 @@ class ChatManager: ObservableObject {
     }
     
     /// Get current model information
-    func getModelInfo() -> LlamaModelInfo {
+    func getModelInfo() -> [String: Any] {
         return llamaWrapper.getModelInfo()
     }
     
@@ -236,14 +236,14 @@ class ChatManager: ObservableObject {
     
     /// Create metadata for AI response
     private func createResponseMetadata(for response: String) -> String {
-        let modelInfo = llamaWrapper.getModelInfo()
+        let modelInfo = getModelInfo()
         let metadata = [
             "model": isModelLoaded ? "llama.cpp" : "placeholder",
             "tokens": response.count,
             "model_loaded": isModelLoaded,
-            "vocabulary_size": modelInfo.vocabularySize,
-            "context_size": modelInfo.contextSize,
-            "memory_usage": modelInfo.memoryUsage
+            "context_size": modelInfo["contextSize"] ?? 0,
+            "threads": modelInfo["threads"] ?? 0,
+            "gpu_enabled": modelInfo["gpuEnabled"] ?? false
         ] as [String: Any]
         
         if let jsonData = try? JSONSerialization.data(withJSONObject: metadata),

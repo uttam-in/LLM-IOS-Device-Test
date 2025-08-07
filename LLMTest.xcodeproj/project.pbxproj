@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		CACFFA5F2E44569A00E9CF33 /* SpeziLLM in Frameworks */ = {isa = PBXBuildFile; productRef = CACFFA5E2E44569A00E9CF33 /* SpeziLLM */; };
+		CACFFA612E4456D500E9CF33 /* SpeziLLMLocal in Frameworks */ = {isa = PBXBuildFile; productRef = CACFFA602E4456D500E9CF33 /* SpeziLLMLocal */; };
+		CACFFA632E4456E400E9CF33 /* SpeziLLMLocalDownload in Frameworks */ = {isa = PBXBuildFile; productRef = CACFFA622E4456E400E9CF33 /* SpeziLLMLocalDownload */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		CA3EF45C2E43CF1B0070DA6A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +58,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CACFFA612E4456D500E9CF33 /* SpeziLLMLocal in Frameworks */,
+				CACFFA632E4456E400E9CF33 /* SpeziLLMLocalDownload in Frameworks */,
+				CACFFA5F2E44569A00E9CF33 /* SpeziLLM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,6 +87,7 @@
 				CA3EF4502E43CF190070DA6A /* LLMTest */,
 				CA3EF45E2E43CF1B0070DA6A /* LLMTestTests */,
 				CA3EF4682E43CF1B0070DA6A /* LLMTestUITests */,
+				CACFFA5D2E44569A00E9CF33 /* Frameworks */,
 				CA3EF44F2E43CF190070DA6A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -90,6 +100,13 @@
 				CA3EF4652E43CF1B0070DA6A /* LLMTestUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		CACFFA5D2E44569A00E9CF33 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -112,6 +129,9 @@
 			);
 			name = LLMTest;
 			packageProductDependencies = (
+				CACFFA5E2E44569A00E9CF33 /* SpeziLLM */,
+				CACFFA602E4456D500E9CF33 /* SpeziLLMLocal */,
+				CACFFA622E4456E400E9CF33 /* SpeziLLMLocalDownload */,
 			);
 			productName = LLMTest;
 			productReference = CA3EF44E2E43CF190070DA6A /* LLMTest.app */;
@@ -197,6 +217,8 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				CACFFA502E443F2800E9CF33 /* XCRemoteSwiftPackageReference "llama" */,
+				CACFFA5B2E444ACE00E9CF33 /* XCRemoteSwiftPackageReference "Spezi" */,
+				CACFFA5C2E44538700E9CF33 /* XCRemoteSwiftPackageReference "SpeziLLM" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = CA3EF44F2E43CF190070DA6A /* Products */;
@@ -420,6 +442,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_INTEROP_MODE = objcxx;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -450,6 +473,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_INTEROP_MODE = objcxx;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -577,7 +601,41 @@
 				minimumVersion = 0.3.3;
 			};
 		};
+		CACFFA5B2E444ACE00E9CF33 /* XCRemoteSwiftPackageReference "Spezi" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/StanfordSpezi/Spezi";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.9.1;
+			};
+		};
+		CACFFA5C2E44538700E9CF33 /* XCRemoteSwiftPackageReference "SpeziLLM" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/StanfordSpezi/SpeziLLM";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.11.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		CACFFA5E2E44569A00E9CF33 /* SpeziLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CACFFA5C2E44538700E9CF33 /* XCRemoteSwiftPackageReference "SpeziLLM" */;
+			productName = SpeziLLM;
+		};
+		CACFFA602E4456D500E9CF33 /* SpeziLLMLocal */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CACFFA5C2E44538700E9CF33 /* XCRemoteSwiftPackageReference "SpeziLLM" */;
+			productName = SpeziLLMLocal;
+		};
+		CACFFA622E4456E400E9CF33 /* SpeziLLMLocalDownload */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CACFFA5C2E44538700E9CF33 /* XCRemoteSwiftPackageReference "SpeziLLM" */;
+			productName = SpeziLLMLocalDownload;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = CA3EF4462E43CF190070DA6A /* Project object */;
 }

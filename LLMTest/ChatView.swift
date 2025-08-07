@@ -184,7 +184,7 @@ struct ChatView: View {
     private func getCurrentModelName() -> String {
         if chatManager.isModelLoaded {
             let modelInfo = chatManager.getModelInfo()
-            if let modelPath = modelInfo.modelPath {
+            if let modelPath = modelInfo["modelPath"] as? String {
                 let modelName = URL(fileURLWithPath: modelPath).lastPathComponent
                 return modelName.replacingOccurrences(of: ".gguf", with: "")
             } else {

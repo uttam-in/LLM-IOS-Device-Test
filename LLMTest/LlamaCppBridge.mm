@@ -96,7 +96,7 @@ NSString * const LlamaCppBridgeErrorDomain = @"LlamaCppBridgeErrorDomain";
 
 - (BOOL)isModelLoaded {
     std::lock_guard<std::mutex> lock(_mutex);
-    return [_swiftWrapper isModelLoaded];
+    return [_swiftWrapper getModelLoadedStatus];
 }
 
 - (void)unloadModel {
@@ -114,7 +114,7 @@ NSString * const LlamaCppBridgeErrorDomain = @"LlamaCppBridgeErrorDomain";
                                         error:(NSError **)error {
     std::lock_guard<std::mutex> lock(_mutex);
     
-    if (![_swiftWrapper isModelLoaded]) {
+    if (![_swiftWrapper getModelLoadedStatus]) {
         if (error) {
             *error = [NSError errorWithDomain:LlamaCppBridgeErrorDomain
                                          code:LlamaCppBridgeErrorNoModelLoaded
@@ -167,7 +167,7 @@ NSString * const LlamaCppBridgeErrorDomain = @"LlamaCppBridgeErrorDomain";
                                error:(NSError **)error {
     std::lock_guard<std::mutex> lock(_mutex);
     
-    if (![_swiftWrapper isModelLoaded]) {
+    if (![_swiftWrapper getModelLoadedStatus]) {
         if (error) {
             *error = [NSError errorWithDomain:LlamaCppBridgeErrorDomain
                                          code:LlamaCppBridgeErrorNoModelLoaded
@@ -226,7 +226,7 @@ NSString * const LlamaCppBridgeErrorDomain = @"LlamaCppBridgeErrorDomain";
 
 - (int)contextLength {
     std::lock_guard<std::mutex> lock(_mutex);
-    return [_swiftWrapper contextLength];
+    return [_swiftWrapper getContextSize];
 }
 
 - (int)embeddingSize {
@@ -236,12 +236,13 @@ NSString * const LlamaCppBridgeErrorDomain = @"LlamaCppBridgeErrorDomain";
 
 - (size_t)modelMemoryUsage {
     std::lock_guard<std::mutex> lock(_mutex);
-    return [_swiftWrapper modelSize];
+    return [_swiftWrapper getModelSize];
 }
 
 - (void)clearMemoryCache {
     std::lock_guard<std::mutex> lock(_mutex);
-    [_swiftWrapper clearCache];
+    // Clear cache - placeholder implementation
+    NSLog(@"[LlamaCppBridge] Clear cache called");
 }
 
 // MARK: - Missing Methods from Header
@@ -269,7 +270,7 @@ NSString * const LlamaCppBridgeErrorDomain = @"LlamaCppBridgeErrorDomain";
 - (nullable NSArray<NSNumber *> *)tokenizeText:(NSString *)text error:(NSError **)error {
     std::lock_guard<std::mutex> lock(_mutex);
     
-    if (![_swiftWrapper isModelLoaded]) {
+    if (![_swiftWrapper getModelLoadedStatus]) {
         if (error) {
             *error = [NSError errorWithDomain:LlamaCppBridgeErrorDomain
                                          code:LlamaCppBridgeErrorNoModelLoaded
@@ -304,7 +305,7 @@ NSString * const LlamaCppBridgeErrorDomain = @"LlamaCppBridgeErrorDomain";
 - (nullable NSString *)detokenizeTokenIds:(NSArray<NSNumber *> *)tokenIds error:(NSError **)error {
     std::lock_guard<std::mutex> lock(_mutex);
     
-    if (![_swiftWrapper isModelLoaded]) {
+    if (![_swiftWrapper getModelLoadedStatus]) {
         if (error) {
             *error = [NSError errorWithDomain:LlamaCppBridgeErrorDomain
                                          code:LlamaCppBridgeErrorNoModelLoaded

@@ -187,8 +187,8 @@ struct QuickSettingsView: View {
         }
     }
     
-    private func getModelDisplayName(from modelInfo: LlamaModelInfo) -> String {
-        if let modelPath = modelInfo.modelPath {
+    private func getModelDisplayName(from modelInfo: [String: Any]) -> String {
+        if let modelPath = modelInfo["modelPath"] as? String, !modelPath.isEmpty {
             let modelName = URL(fileURLWithPath: modelPath).lastPathComponent
             return modelName.replacingOccurrences(of: ".gguf", with: "")
         } else {
