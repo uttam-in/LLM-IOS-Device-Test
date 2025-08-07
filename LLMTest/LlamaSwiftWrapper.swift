@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import Spezi
 
 // SpeziLLM imports - package products now linked to target
 import SpeziLLM
@@ -24,12 +25,20 @@ public class LlamaSwiftWrapper: NSObject, ObservableObject {
     
     // SpeziLLM session - will be created when model is loaded
     private var llmSession: LLMLocalSession?
+    private var llmRunner: LLMRunner?
     
     public override init() {
         super.init()
         print("[LlamaSwiftWrapper] Initialized - SpeziLLM integration activated")
-        // Note: LLMRunner is typically used as SwiftUI environment object
-        // We'll create sessions directly for our bridge architecture
+        setupSpeziLLMRunner()
+    }
+    
+    private func setupSpeziLLMRunner() {
+        // Create LLMRunner with LLMLocalPlatform - matching app configuration
+        self.llmRunner = LLMRunner {
+            LLMLocalPlatform()
+        }
+        print("[LlamaSwiftWrapper] SpeziLLM runner configured successfully")
     }
     
     deinit {
@@ -98,16 +107,19 @@ public class LlamaSwiftWrapper: NSObject, ObservableObject {
         do {
             print("🔍 [LlamaSwiftWrapper] Validating model compatibility with SpeziLLM...")
             
+            guard let runner = self.llmRunner else {
+                let error = "LLMRunner not properly initialized"
+                print("❌ [LlamaSwiftWrapper] \(error)")
+                self.errorMessage = error
+                throw NSError(domain: "LlamaSwiftWrapper", code: 11, userInfo: [NSLocalizedDescriptionKey: error])
+            }
+            
             let schema = LLMLocalSchema(
                 model: .custom(id: path),
                 parameters: .init(
                     maxOutputLength: 10 // Small test generation
                 )
             )
-            
-            let runner = LLMRunner {
-                LLMLocalPlatform()
-            }
             
             // Create session to validate model can be loaded
             let testSession: LLMLocalSession = runner(with: schema)
@@ -193,12 +205,15 @@ public class LlamaSwiftWrapper: NSObject, ObservableObject {
             )
             print("🚀 [LlamaSwiftWrapper] Schema created with model: \(modelPath)")
             
-            // Create LLMRunner with LLMLocalPlatform
-            print("🚀 [LlamaSwiftWrapper] Creating LLMRunner...")
-            let runner = LLMRunner {
-                LLMLocalPlatform()
+            // Use the pre-configured LLMRunner
+            print("🚀 [LlamaSwiftWrapper] Using configured LLMRunner...")
+            guard let runner = self.llmRunner else {
+                let error = "LLMRunner not properly initialized"
+                print("❌ [LlamaSwiftWrapper] \(error)")
+                self.errorMessage = error
+                throw NSError(domain: "LlamaSwiftWrapper", code: 11, userInfo: [NSLocalizedDescriptionKey: error])
             }
-            print("🚀 [LlamaSwiftWrapper] Runner created successfully")
+            print("🚀 [LlamaSwiftWrapper] Runner ready for inference")
             
             // Create LLMLocalSession for actual inference
             print("🚀 [LlamaSwiftWrapper] Creating LLMLocalSession...")
@@ -439,8 +454,9 @@ public class LlamaSwiftWrapper: NSObject, ObservableObject {
                         )
                     )
                     
-                    let runner = LLMRunner {
-                        LLMLocalPlatform()
+                    guard let runner = self.llmRunner else {
+                        continuation.finish(throwing: NSError(domain: "LlamaSwiftWrapper", code: 11, userInfo: [NSLocalizedDescriptionKey: "LLMRunner not properly initialized"]))
+                        return
                     }
                     
                     let session: LLMLocalSession = runner(with: schema)
