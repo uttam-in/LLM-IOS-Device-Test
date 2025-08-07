@@ -9,6 +9,7 @@ import SwiftUI
 
 struct NavigationMenuView: View {
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var chatManager = ChatManager.shared
     @Binding var showingModelDownload: Bool
     @Binding var showingConversationList: Bool
     @Binding var showingDevicePerformance: Bool
@@ -81,7 +82,7 @@ struct NavigationMenuView: View {
                         subtitle: "Start a fresh chat",
                         color: .blue
                     ) {
-                        // TODO: Implement new conversation creation
+                        createNewConversation()
                         dismiss()
                     }
                     
@@ -127,6 +128,11 @@ struct NavigationMenuView: View {
                 }
             }
         }
+    }
+    
+    private func createNewConversation() {
+        let _ = chatManager.startNewConversation(title: "New Chat")
+        // The new conversation is now available in the conversation list
     }
 }
 

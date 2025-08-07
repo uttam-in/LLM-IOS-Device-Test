@@ -9,6 +9,8 @@ import SwiftUI
 
 struct ChatView: View {
     @StateObject private var chatManager = ChatManager.shared
+    @StateObject private var modelManager = ModelManager.shared
+    @StateObject private var settingsManager = SettingsManager.shared
     @State private var messageText = ""
     @State private var showingSettings = false
     @State private var showingNavigationMenu = false
@@ -16,6 +18,8 @@ struct ChatView: View {
     @State private var showingConversationList = false
     @State private var showingDevicePerformance = false
     @State private var showingExport = false
+    @State private var showingModelSelector = false
+    @State private var showingQuickSettings = false
     @FocusState private var isInputFocused: Bool
     
     let conversation: Conversation
@@ -80,16 +84,40 @@ struct ChatView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: { showingNavigationMenu = true }) {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.title3)
+                HStack(spacing: 16) {
+                    Button(action: { showingNavigationMenu = true }) {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.title3)
+                    }
+                    
+                    Button(action: { showingModelSelector = true }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "brain")
+                            Text(getCurrentModelName())
+                                .font(.caption)
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(.blue)
+                    }
                 }
             }
             
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: { showingSettings = true }) {
-                    Image(systemName: "gearshape")
-                        .font(.title3)
+                HStack(spacing: 12) {
+                    Button(action: { createNewChat() }) {
+                        Image(systemName: "plus.bubble")
+                            .font(.title3)
+                    }
+                    
+                    Button(action: { showingQuickSettings = true }) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.title3)
+                    }
+                    
+                    Button(action: { showingSettings = true }) {
+                        Image(systemName: "gearshape")
+                            .font(.title3)
+                    }
                 }
             }
         }
@@ -124,6 +152,12 @@ struct ChatView: View {
             // Use the ExportView from SettingsView
             ExportView()
         }
+        .sheet(isPresented: $showingModelSelector) {
+            ModelSelectorView()
+        }
+        .sheet(isPresented: $showingQuickSettings) {
+            QuickSettingsView()
+        }
         .onTapGesture {
             // Dismiss keyboard when tapping outside
             isInputFocused = false
@@ -145,6 +179,26 @@ struct ChatView: View {
         Task {
             await chatManager.sendMessage(trimmedMessage, to: conversation)
         }
+    }
+    
+    private func getCurrentModelName() -> String {
+        if chatManager.isModelLoaded {
+            let modelInfo = chatManager.getModelInfo()
+            if let modelPath = modelInfo.modelPath {
+                let modelName = URL(fileURLWithPath: modelPath).lastPathComponent
+                return modelName.replacingOccurrences(of: ".gguf", with: "")
+            } else {
+                return "Model"
+            }
+        } else {
+            return "No Model"
+        }
+    }
+    
+    private func createNewChat() {
+        let _ = chatManager.startNewConversation(title: "New Chat")
+        // Note: In a real app, you might want to navigate to this new conversation
+        // For now, we'll just create it and it will be available in the conversation list
     }
 }
 
