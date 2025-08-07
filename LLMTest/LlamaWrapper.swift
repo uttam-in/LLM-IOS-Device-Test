@@ -110,10 +110,12 @@ class MockLlamaCppBridge {
     private var modelLoaded = false
     private var threads: Int32 = 4
     private var gpuEnabled = false
+    private var currentModelPath: String = ""
     
     func loadModel(atPath path: String, contextSize: Int32, error: inout NSError?) -> Bool {
         // Mock implementation
         modelLoaded = true
+        currentModelPath = path
         return true
     }
     
@@ -126,8 +128,40 @@ class MockLlamaCppBridge {
     }
     
     func generateText(_ prompt: String, maxTokens: Int32, temperature: Float, topP: Float, error: inout NSError?) -> String? {
-        // Mock response
-        return "This is a mock response to: \(prompt)"
+        // Model-specific mock responses
+        let modelName = URL(fileURLWithPath: currentModelPath).lastPathComponent
+        
+        if modelName.contains("qwen3") {
+            return generateQwenResponse(for: prompt, temperature: temperature)
+        } else if modelName.contains("gemma") {
+            return generateGemmaResponse(for: prompt, temperature: temperature)
+        } else {
+            return "I'm an AI assistant. How can I help you today?"
+        }
+    }
+    
+    private func generateQwenResponse(for prompt: String, temperature: Float) -> String {
+        let responses = [
+            "As Qwen3 0.6B, I can help you with that. \(prompt.count < 20 ? "Could you provide more details?" : "Let me think about this carefully.")",
+            "I'm Qwen3, a compact but capable AI model. Regarding your question about \(prompt.prefix(30))..., I'd say this is an interesting topic.",
+            "Hello! I'm running on the Qwen3 0.6B model. Your query about \(prompt.prefix(20)) is something I can assist with.",
+            "As a Qwen3 model, I'm designed to be efficient yet helpful. About \(prompt.prefix(25))... let me provide some insights."
+        ]
+        
+        let index = abs(prompt.hashValue) % responses.count
+        return responses[index]
+    }
+    
+    private func generateGemmaResponse(for prompt: String, temperature: Float) -> String {
+        let responses = [
+            "I'm Gemma 2B, Google's open model. Regarding \(prompt.prefix(30))..., here's what I think.",
+            "As Gemma 2B, I can help with that. Your question about \(prompt.prefix(20)) is quite interesting.",
+            "Hello! I'm running on Gemma 2B. About \(prompt.prefix(25))... let me share some thoughts.",
+            "I'm Gemma, designed to be helpful and harmless. Concerning \(prompt.prefix(30))..., I'd suggest considering this approach."
+        ]
+        
+        let index = abs(prompt.hashValue) % responses.count
+        return responses[index]
     }
     
     func getVocabularySize() -> Int32 { return 32000 }

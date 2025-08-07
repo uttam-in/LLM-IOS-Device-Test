@@ -80,7 +80,7 @@ struct FirstTimeSetupView: View {
                 .font(.title2)
                 .fontWeight(.semibold)
             
-            Text("To get started, we need to download the Gemma 2B language model. This will enable AI conversations directly on your device.")
+            Text("To get started, we need to download the Qwen3 0.6B language model. This will enable AI conversations directly on your device.")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -111,7 +111,7 @@ struct FirstTimeSetupView: View {
     
     private var downloadingContent: some View {
         VStack(spacing: 16) {
-            Text("Downloading Gemma 2B Model")
+            Text("Downloading Qwen3 0.6B Model")
                 .font(.title2)
                 .fontWeight(.semibold)
             
@@ -279,8 +279,8 @@ struct FirstTimeSetupView: View {
     }
     
     private func startDownload() {
-        guard let gemmaModel = modelManager.availableModels.first(where: { $0.id == "gemma-2b-it-gguf" }) else {
-            downloadError = "Gemma 2B model not found in available models"
+        guard let qwenModel = modelManager.availableModels.first(where: { $0.id == "qwen3-0.6b-gguf" }) else {
+            downloadError = "Qwen3 0.6B model not found in available models"
             setupPhase = .error
             return
         }
@@ -290,7 +290,7 @@ struct FirstTimeSetupView: View {
         
         Task {
             do {
-                try await modelManager.downloadModel(gemmaModel)
+                try await modelManager.downloadModel(qwenModel)
                 await MainActor.run {
                     setupPhase = .completed
                     isDownloading = false
@@ -306,8 +306,8 @@ struct FirstTimeSetupView: View {
     }
     
     private func cancelDownload() {
-        if let gemmaModel = modelManager.availableModels.first(where: { $0.id == "gemma-2b-it-gguf" }) {
-            modelManager.cancelDownload(for: gemmaModel)
+        if let qwenModel = modelManager.availableModels.first(where: { $0.id == "qwen3-0.6b-gguf" }) {
+            modelManager.cancelDownload(for: qwenModel)
         }
         isDownloading = false
         setupPhase = .welcome
