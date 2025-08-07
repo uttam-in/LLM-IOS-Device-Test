@@ -77,41 +77,89 @@ public class LlamaSwiftWrapper: NSObject, ObservableObject {
     
     /// Generate text method compatible with ChatManager
     public func generateText(prompt: String, maxTokens: Int, temperature: Float, topP: Float) async throws -> String {
+        print("🔥 [LlamaSwiftWrapper] Starting text generation...")
+        print("🔥 [LlamaSwiftWrapper] Prompt: \"\(prompt)\"")
+        print("🔥 [LlamaSwiftWrapper] Parameters - maxTokens: \(maxTokens), temperature: \(temperature), topP: \(topP)")
+        
         self.isGenerating = true
         self.errorMessage = nil
         
         defer {
             self.isGenerating = false
+            print("🔥 [LlamaSwiftWrapper] Text generation completed")
         }
         
         guard isModelLoaded else {
             let error = "No model loaded for text generation"
+            print("❌ [LlamaSwiftWrapper] Error: \(error)")
             self.errorMessage = error
             throw NSError(domain: "LlamaSwiftWrapper", code: 2, userInfo: [NSLocalizedDescriptionKey: error])
         }
         
         guard !prompt.isEmpty else {
             let error = "Empty prompt provided"
+            print("❌ [LlamaSwiftWrapper] Error: \(error)")
             self.errorMessage = error
             throw NSError(domain: "LlamaSwiftWrapper", code: 3, userInfo: [NSLocalizedDescriptionKey: error])
         }
         
         guard let modelPath = currentModelPath else {
             let error = "No model path available"
+            print("❌ [LlamaSwiftWrapper] Error: \(error)")
             self.errorMessage = error
             throw NSError(domain: "LlamaSwiftWrapper", code: 4, userInfo: [NSLocalizedDescriptionKey: error])
         }
         
+        print("🔥 [LlamaSwiftWrapper] Using model at path: \(modelPath)")
+        
         // SpeziLLM text generation - now activated with linked packages
         do {
+            print("🚀 [LlamaSwiftWrapper] Creating SpeziLLM schema...")
             let schema = LLMLocalSchema(
                 model: .custom(id: modelPath)
             )
+            print("🚀 [LlamaSwiftWrapper] Schema created: \(schema)")
             
-            // Create LLMLocalPlatform for on-device inference
-            let platform = LLMLocalPlatform()
+            // Create LLMRunner with LLMLocalPlatform
+            print("🚀 [LlamaSwiftWrapper] Creating LLMRunner...")
+            let runner = LLMRunner {
+                LLMLocalPlatform()
+            }
+            print("🚀 [LlamaSwiftWrapper] Runner created: \(runner)")
             
-            let response = "🎉 SpeziLLM Integration Active!\n\nModel: \(modelPath.split(separator: "/").last ?? "Unknown")\nPrompt: \"\(prompt)\"\nTokens: \(maxTokens)\nTemp: \(temperature)\nTopP: \(topP)\n\n✅ SpeziLLM modules successfully linked!\n⚠️ Ready for device testing (simulator not supported)\n\nSchema created: \(schema)\nPlatform: \(platform)"
+            // Create LLMLocalSession for actual inference
+            print("🚀 [LlamaSwiftWrapper] Creating LLMLocalSession...")
+            let session: LLMLocalSession = runner(with: schema)
+            print("🚀 [LlamaSwiftWrapper] Session created successfully")
+            
+            // Generate actual LLM response
+            print("🤖 [LlamaSwiftWrapper] Starting LLM inference...")
+            print("🤖 [LlamaSwiftWrapper] Input prompt: \"\(prompt)\"")
+            var fullResponse = ""
+            
+            // Add user message to session context
+            print("💬 [LlamaSwiftWrapper] Adding user message to session...")
+            await MainActor.run {
+                session.context.append(userInput: prompt)
+            }
+            
+            // Use SpeziLLM's generate method with streaming
+            for try await token in try await session.generate() {
+                fullResponse += token
+                print("📝 [LlamaSwiftWrapper] Token: \(token)")
+                
+                // Stop if we've reached max tokens
+                if fullResponse.split(separator: " ").count >= maxTokens {
+                    print("⏹️ [LlamaSwiftWrapper] Reached max tokens limit (\(maxTokens))")
+                    break
+                }
+            }
+            
+            let response = fullResponse.isEmpty ? "No response generated" : fullResponse
+            print("🎉 [LlamaSwiftWrapper] Complete LLM response generated!")
+            
+            print("✅ [LlamaSwiftWrapper] Generated response: \"\(response)\"")
+            print("✅ [LlamaSwiftWrapper] Response length: \(response.count) characters")
             
             print("[LlamaSwiftWrapper] SpeziLLM integration active - ready for device testing")
             return response

@@ -151,10 +151,14 @@ class ChatManager: ObservableObject {
     
     /// Generate AI response using the loaded model
     private func generateAIResponse(for prompt: String, in conversation: Conversation) async {
+        print("🤖 [ChatManager] Generating AI response for prompt: \"\(prompt)\"")
+        print("🤖 [ChatManager] Model loaded status: \(isModelLoaded)")
+        
         do {
             let response: String
             
             if isModelLoaded {
+                print("🤖 [ChatManager] Using loaded LLM model for inference")
                 // Use the actual LLM model for on-device inference
                 response = try await llamaWrapper.generateText(
                     prompt: prompt,
@@ -162,10 +166,15 @@ class ChatManager: ObservableObject {
                     temperature: 0.7,
                     topP: 0.9
                 )
+                print("🤖 [ChatManager] LLM Response Generated: \"\(response)\"")
+                print("🤖 [ChatManager] Response length: \(response.count) characters")
             } else {
                 // No model loaded - inform user to load a model first
                 response = "Please load a model first to start chatting. You can download and load models from the Model Management section."
+                print("🤖 [ChatManager] No model loaded - using fallback response")
             }
+            
+            print("🤖 [ChatManager] Final response: \"\(response)\"")
             
             // Add AI message
             _ = storageManager.addMessage(
