@@ -17,7 +17,10 @@ struct ContentView: View {
         ZStack {
             if hasCompletedFirstTimeSetup {
                 if let conversation = currentConversation {
-                    ChatView(conversation: conversation)
+                    NavigationView {
+                        ChatView(conversation: conversation)
+                    }
+                    .navigationViewStyle(StackNavigationViewStyle())
                 } else {
                     ProgressView("Loading...")
                         .onAppear {
