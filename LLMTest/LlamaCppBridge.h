@@ -145,11 +145,12 @@ extern NSString * const LlamaCppBridgeErrorDomain;
 typedef NS_ENUM(NSInteger, LlamaCppBridgeError) {
     LlamaCppBridgeErrorModelNotFound = 1000,
     LlamaCppBridgeErrorModelLoadFailed = 1001,
-    LlamaCppBridgeErrorInferenceFailed = 1002,
-    LlamaCppBridgeErrorInvalidParameters = 1003,
-    LlamaCppBridgeErrorOutOfMemory = 1004,
-    LlamaCppBridgeErrorTokenizationFailed = 1005,
-    LlamaCppBridgeErrorNoModelLoaded = 1006
+    LlamaCppBridgeErrorContextCreationFailed = 1002,
+    LlamaCppBridgeErrorInferenceFailed = 1003,
+    LlamaCppBridgeErrorInvalidParameters = 1004,
+    LlamaCppBridgeErrorOutOfMemory = 1005,
+    LlamaCppBridgeErrorTokenizationFailed = 1006,
+    LlamaCppBridgeErrorNoModelLoaded = 1007
 };
 
 NS_ASSUME_NONNULL_END

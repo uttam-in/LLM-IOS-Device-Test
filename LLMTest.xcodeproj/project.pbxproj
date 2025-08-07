@@ -195,6 +195,9 @@
 			);
 			mainGroup = CA3EF4452E43CF190070DA6A;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				CACFFA502E443F2800E9CF33 /* XCRemoteSwiftPackageReference "llama" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = CA3EF44F2E43CF190070DA6A /* Products */;
 			projectDirPath = "";
@@ -329,6 +332,7 @@
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
@@ -386,6 +390,7 @@
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OBJC_INTEROP_MODE = objc;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -562,6 +567,17 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		CACFFA502E443F2800E9CF33 /* XCRemoteSwiftPackageReference "llama" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/StanfordBDHG/llama.cpp";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.3.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
 	};
 	rootObject = CA3EF4462E43CF190070DA6A /* Project object */;
 }

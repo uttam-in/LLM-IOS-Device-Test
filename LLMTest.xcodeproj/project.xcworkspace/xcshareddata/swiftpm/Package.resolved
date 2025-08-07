@@ -1,0 +1,15 @@
+{
+  "originHash" : "887a5b33b9794deb43df0617a73a69132be180f86fb56baf07e23448f64175ba",
+  "pins" : [
+    {
+      "identity" : "llama.cpp",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/StanfordBDHG/llama.cpp",
+      "state" : {
+        "revision" : "6839853a321778906e210a33ee2c6aec52f34c97",
+        "version" : "0.3.3"
+      }
+    }
+  ],
+  "version" : 3
+}
